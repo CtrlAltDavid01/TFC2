@@ -1,11 +1,10 @@
 package com.bioxx.tfc2.items;
 
-import java.util.LinkedList;
+import java.util.List;
 import java.util.Set;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
@@ -18,60 +17,62 @@ import net.minecraft.world.World;
 import com.bioxx.tfc2.Core;
 import com.bioxx.tfc2.TFCBlocks;
 import com.bioxx.tfc2.blocks.BlockSapling;
+import com.bioxx.tfc2.blocks.BlockSapling2;
+import com.bioxx.tfc2.core.TFCTabs;
 import com.google.common.collect.Sets;
 
 public class ItemAxe extends ItemTerraTool 
 {
-	private static final Set EFFECTIVE_ON = Sets.newHashSet(new Block[] {Blocks.PLANKS, Blocks.BOOKSHELF, Blocks.LOG, Blocks.LOG2, Blocks.CHEST, Blocks.PUMPKIN, Blocks.LIT_PUMPKIN, Blocks.MELON_BLOCK, Blocks.LADDER, TFCBlocks.LogNatural, TFCBlocks.LogNatural2, TFCBlocks.LogNaturalPalm});
+	private static final Set<Block> EFFECTIVE_ON = Sets.newHashSet(new Block[] {Blocks.PLANKS, Blocks.BOOKSHELF, Blocks.LOG, Blocks.LOG2, Blocks.CHEST, Blocks.PUMPKIN, 
+			Blocks.LIT_PUMPKIN, Blocks.MELON_BLOCK, Blocks.LADDER, TFCBlocks.LogNatural, TFCBlocks.LogNatural2, TFCBlocks.LogNaturalPalm, 
+			TFCBlocks.Planks, TFCBlocks.Planks2, TFCBlocks.LogHorizontal, TFCBlocks.LogHorizontal2, TFCBlocks.LogHorizontal3, TFCBlocks.LogVertical, TFCBlocks.LogVertical2,
+			TFCBlocks.StairsAcacia, TFCBlocks.StairsAsh, TFCBlocks.StairsBirch, TFCBlocks.StairsBlackwood, TFCBlocks.StairsChestnut, TFCBlocks.StairsDouglasFir,
+			TFCBlocks.StairsHickory, TFCBlocks.StairsMaple, TFCBlocks.StairsOak, TFCBlocks.StairsPine, TFCBlocks.StairsSequoia, TFCBlocks.StairsSpruce, 
+			TFCBlocks.StairsSycamore, TFCBlocks.StairsWhiteCedar, TFCBlocks.StairsWillow, TFCBlocks.StairsKapok, TFCBlocks.StairsAcacia, TFCBlocks.StairsRosewood, 
+			TFCBlocks.StairsBlackwood, TFCBlocks.StairsPalm, TFCBlocks.SupportBeam, TFCBlocks.SupportBeam2, TFCBlocks.SupportBeam3});
+	public int maxTreeSize = 0;
 
-	public ItemAxe(ToolMaterial mat)
+	public ItemAxe(ToolMaterial mat, int maxCutSize)
 	{
 		super(mat, EFFECTIVE_ON);
 		this.damageVsEntity = 1;
 		this.attackSpeed = -3.2f;
+		this.setCreativeTab(TFCTabs.TFCTools);
+		this.maxTreeSize = maxCutSize;
 	}
 
 	@Override
-	public EnumActionResult onItemUse(ItemStack stack, EntityPlayer playerIn, World worldIn, BlockPos pos, EnumHand hand, EnumFacing facing, float hitX, float hitY, float hitZ)
+	public float getStrVsBlock(ItemStack stack, IBlockState state)
 	{
+		for (String type : getToolClasses(stack))
+		{
+			if (state.getBlock().isToolEffective(type, state))
+				return efficiencyOnProperMaterial;
+		}
+		return EFFECTIVE_ON.contains(state.getBlock()) ? this.efficiencyOnProperMaterial : 1.0F;
+	}
+
+	@Override
+	public void addInformation(ItemStack is, EntityPlayer player, List arraylist, boolean flag)
+	{
+		super.addInformation(is, player, arraylist, flag);
+		arraylist.add(Core.translate("gui.axe.maxcutsize") + ": " + maxTreeSize);
+	}
+
+	@Override
+	public EnumActionResult onItemUse(EntityPlayer playerIn, World worldIn, BlockPos pos, EnumHand hand, EnumFacing facing, float hitX, float hitY, float hitZ)
+	{
+		//ItemStack stack = playerIn.getHeldItem(hand);
 		if(worldIn.isRemote || !playerIn.capabilities.isCreativeMode)
 			return EnumActionResult.FAIL;
 		IBlockState state = worldIn.getBlockState(pos);
-		if(state.getBlock() == TFCBlocks.Sapling)
+		if(playerIn.isCreative() && state.getBlock() == TFCBlocks.Sapling)
 			((BlockSapling)state.getBlock()).grow(worldIn, worldIn.rand, pos, state);
+		if(playerIn.isCreative() && state.getBlock() == TFCBlocks.Sapling2)
+			((BlockSapling2)state.getBlock()).grow(worldIn, worldIn.rand, pos, state);
 
 		return EnumActionResult.SUCCESS;
 	}
 
-	@Override
-	public boolean onBlockDestroyed(ItemStack stack, World worldIn, IBlockState state, BlockPos pos, EntityLivingBase entityLiving)
-	{
-		if(worldIn.isRemote || !Core.isNaturalLog(state))
-			return super.onBlockDestroyed(stack, worldIn, state, pos, entityLiving);
-
-		LinkedList<BlockPos> queue = new LinkedList<BlockPos>();
-		queue.add(pos);
-
-		BlockPos scanPos;
-		IBlockState scanState;
-		while(!queue.isEmpty())
-		{
-			scanPos = queue.pop();
-			scanState = worldIn.getBlockState(scanPos);
-			if(Core.isNaturalLog(scanState))
-			{
-				scanState.getBlock().dropBlockAsItem(worldIn, scanPos, scanState, 0);
-				worldIn.setBlockToAir(scanPos);
-				Iterable<BlockPos> list = BlockPos.getAllInBox(scanPos.add(-1, 0, -1), scanPos.add(1, 1, 1));
-				for(BlockPos p : list)
-				{
-					queue.add(p);
-				}
-			}
-		}
-
-
-		return false;
-	}
 
 }

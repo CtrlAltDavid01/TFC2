@@ -2,7 +2,7 @@ package com.bioxx.tfc2.containers;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
-import net.minecraft.inventory.ICrafting;
+import net.minecraft.inventory.IContainerListener;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
@@ -28,7 +28,7 @@ public class ContainerAnvil extends ContainerTFC
 		this.world = world;
 		this.anvil = anvil;
 		anvil.openInventory(player);
-		PlayerInventory.buildInventoryLayout(this, playerinv, 8, 91, false, true);
+		PlayerInventory.buildInventoryLayout(this, playerinv, 8, 95, false, true);
 		layoutContainer(playerinv, anvil, 0, 0);
 	}
 
@@ -43,12 +43,12 @@ public class ContainerAnvil extends ContainerTFC
 			anvil.closeInventory(par1EntityPlayer);
 	}
 
-	@Override
-	public void onCraftGuiOpened(ICrafting listener)
+	/*@Override
+	public void onCraftGuiOpened(IContainerListener listener)
 	{
 		super.onCraftGuiOpened(listener);
 		listener.sendAllWindowProperties(this, this.anvil);
-	}
+	}*/
 
 	@Override
 	@SideOnly(Side.CLIENT)
@@ -63,7 +63,7 @@ public class ContainerAnvil extends ContainerTFC
 		super.detectAndSendChanges();
 		for (int i = 0; i < this.listeners.size(); ++i)
 		{
-			ICrafting icrafting = (ICrafting)this.listeners.get(i);
+			IContainerListener icrafting = (IContainerListener)this.listeners.get(i);
 
 			if(this.recipeIndex != anvil.getField(0))
 			{
@@ -82,7 +82,7 @@ public class ContainerAnvil extends ContainerTFC
 	@Override
 	public ItemStack transferStackInSlotTFC(EntityPlayer player, int slotNum)
 	{
-		ItemStack origStack = null;
+		ItemStack origStack = ItemStack.EMPTY;
 		Slot slot = (Slot)this.inventorySlots.get(slotNum);
 
 		if (slot != null && slot.getHasStack())
@@ -94,28 +94,28 @@ public class ContainerAnvil extends ContainerTFC
 			if (slotNum >= 9 && slotNum < 27)
 			{
 				if (!this.mergeItemStack(slotStack, 27, inventorySlots.size(), true))
-					return null;
+					return ItemStack.EMPTY;
 			}
 			else if (slotNum < 9)
 			{
 				if (!this.mergeItemStack(slotStack, 9, 27, true))
-					return null;
+					return ItemStack.EMPTY;
 			}
 			else
 			{
 				if (!this.mergeItemStack(slotStack, 9, 27, false))
-					return null;
+					return ItemStack.EMPTY;
 			}
 
-			if (slotStack.stackSize <= 0)
-				slot.putStack(null);
+			if (slotStack.getMaxStackSize() <= 0)
+				slot.putStack(ItemStack.EMPTY);
 			else
 				slot.onSlotChanged();
 
-			if (slotStack.stackSize == origStack.stackSize)
-				return null;
+			if (slotStack.getMaxStackSize() == origStack.getMaxStackSize())
+				return ItemStack.EMPTY;
 
-			slot.onPickupFromSlot(player, slotStack);
+			slot.onTake(player, slotStack);
 		}
 
 		return origStack;

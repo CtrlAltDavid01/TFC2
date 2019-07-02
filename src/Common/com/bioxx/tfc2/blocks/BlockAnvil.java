@@ -17,9 +17,7 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.*;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
@@ -35,6 +33,7 @@ import com.bioxx.tfc2.Core;
 import com.bioxx.tfc2.Reference;
 import com.bioxx.tfc2.TFC;
 import com.bioxx.tfc2.api.properties.PropertyItem;
+import com.bioxx.tfc2.core.TFCTabs;
 import com.bioxx.tfc2.rendering.particles.ParticleAnvil;
 import com.bioxx.tfc2.tileentities.TileAnvil;
 
@@ -43,15 +42,16 @@ public class BlockAnvil extends BlockTerra implements ITileEntityProvider
 	public static final PropertyDirection FACING = BlockHorizontal.FACING;
 	public static final PropertyItem INVENTORY = new PropertyItem();
 
-	public static final AxisAlignedBB AABB_EW = new AxisAlignedBB(0.19,0,0.0625,0.81,0.63,0.9375);
-	public static final AxisAlignedBB AABB_NS = new AxisAlignedBB(0.0625,0,0.19,0.9375,0.63,0.81);
+	public static final AxisAlignedBB AABB_EW = new AxisAlignedBB(0.19,0,0.0625,0.81,0.6925,0.9375);
+	public static final AxisAlignedBB AABB_NS = new AxisAlignedBB(0.0625,0,0.19,0.9375,0.6925,0.81);
 
 	public BlockAnvil()
 	{
 		super(Material.GRASS, FACING);
-		this.setCreativeTab(CreativeTabs.TOOLS);
+		this.setCreativeTab(TFCTabs.TFCDevices);
 		this.isBlockContainer = true;
 		setSoundType(SoundType.GROUND);
+		this.setBreaksWhenSuspended(true);
 	}
 
 	/*******************************************************************************
@@ -59,16 +59,38 @@ public class BlockAnvil extends BlockTerra implements ITileEntityProvider
 	 *******************************************************************************/
 
 	@Override
-	public boolean onBlockActivated(World world, BlockPos pos, IBlockState state, EntityPlayer playerIn, net.minecraft.util.EnumHand hand, ItemStack heldItem, EnumFacing side, float hitX, float hitY, float hitZ)
+	public boolean onBlockActivated(World world, BlockPos pos, IBlockState state, EntityPlayer playerIn, 
+			net.minecraft.util.EnumHand hand, EnumFacing side, float hitX, float hitY, float hitZ)
 	{
-		if(world.isRemote)
-			return false;
 		EnumFacing facing = state.getValue(BlockAnvil.FACING);
 		TileAnvil te = (TileAnvil)world.getTileEntity(pos);
-		if(te.getTimer() <= 0)
+		if(!world.isRemote && te.getTimer() <= 0)
 			playerIn.openGui(TFC.instance, 2, world, pos.getX(), pos.getY(), pos.getZ());
 		else if(te.getSmith() == playerIn && side == EnumFacing.UP)
 		{
+			int subX = 0;
+			int subZ = 0;
+
+			if(facing == EnumFacing.EAST || facing == EnumFacing.WEST)
+			{
+				hitX -= 0.25f;
+				hitZ -= 0.125f;
+
+				subX = (int)Math.floor(hitZ/0.125f);
+				subZ = (int)Math.floor(hitX/0.125f);
+			}
+			else
+			{
+				hitZ -= 0.25f;
+				hitX -= 0.125f;
+
+				subX = (int)Math.floor(hitX/0.125f);
+				subZ = (int)Math.floor(hitZ/0.125f);
+			}
+
+			TFC.log.info("Hit: " + subX + "," + subZ + " | " + TileAnvil.getStrikePointIndex(subX, subZ));
+
+			te.hitStrikePoint(TileAnvil.getStrikePointIndex(subX, subZ));
 
 			//get the targeted sub block coords
 			/*double subX = hitX/8D;
@@ -91,9 +113,15 @@ public class BlockAnvil extends BlockTerra implements ITileEntityProvider
 	}
 
 	@Override
-	public void onBlockPlacedBy(World worldIn, BlockPos pos, IBlockState state, EntityLivingBase placer, ItemStack stack)
+	public IBlockState getStateForPlacement(World worldIn, BlockPos pos, EnumFacing facing, float hitX, float hitY, float hitZ, int meta, EntityLivingBase placer, EnumHand hand)
 	{
-		worldIn.setBlockState(pos, state.withProperty(FACING, placer.getHorizontalFacing()));
+		return this.getDefaultState().withProperty(FACING, placer.getHorizontalFacing());
+	}
+
+	@Override
+	public void getSubBlocks(Item itemIn, CreativeTabs tab, NonNullList list)
+	{
+		list.add(new ItemStack(itemIn, 1, 0));
 	}
 
 	/*******************************************************************************
@@ -172,7 +200,7 @@ public class BlockAnvil extends BlockTerra implements ITileEntityProvider
 	}
 
 	@Override
-	public AxisAlignedBB getCollisionBoundingBox(IBlockState state, World worldIn, BlockPos pos)
+	public AxisAlignedBB getCollisionBoundingBox(IBlockState state, IBlockAccess worldIn, BlockPos pos)
 	{
 		if(state.getValue(FACING) == EnumFacing.NORTH || state.getValue(FACING) == EnumFacing.SOUTH)
 			return AABB_NS;
@@ -236,7 +264,7 @@ public class BlockAnvil extends BlockTerra implements ITileEntityProvider
 	@Override
 	public Item getItemDropped(IBlockState paramIBlockState, Random paramRandom, int paramInt)
 	{
-		return null;
+		return Item.getItemFromBlock(this);
 	}
 
 	@Override

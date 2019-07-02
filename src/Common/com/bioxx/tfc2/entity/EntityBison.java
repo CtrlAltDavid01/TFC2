@@ -46,7 +46,7 @@ public class EntityBison extends EntityAnimal
 	}
 
 	@Override
-	protected void updateAITick ()
+	protected void updateAITasks()
 	{
 		//getDataManager().set (18, getHealth());
 		this.motionY += 0.03999999910593033D;
@@ -114,12 +114,12 @@ public class EntityBison extends EntityAnimal
 	@Override
 	protected SoundEvent getAmbientSound ()
 	{
-		if(isChild() && worldObj.rand.nextInt(100) < 5)
-			return TFC_Sounds.BEARCUBCRY;
-		else if(worldObj.rand.nextInt(100) < 5)
-			return TFC_Sounds.BEARCRY;
+		if(isChild() && world.rand.nextInt(100) < 5)
+			return null; //TFC_Sounds.BISONCUBCRY;
+		else if(world.rand.nextInt(100) < 5)
+			return TFC_Sounds.BISONCRY;
 
-		return isChild() ? null : TFC_Sounds.BEARSAY;
+		return isChild() ? null : TFC_Sounds.BISONSAY;
 	}
 
 	/**
@@ -129,9 +129,9 @@ public class EntityBison extends EntityAnimal
 	protected SoundEvent getHurtSound()
 	{
 		if(!isChild())
-			return TFC_Sounds.BEARHURT;
+			return TFC_Sounds.BISONHURT;
 		else
-			return TFC_Sounds.BEARCUBCRY;
+			return null; //TFC_Sounds.BISONCUBCRY;
 	}
 
 	/**
@@ -141,9 +141,9 @@ public class EntityBison extends EntityAnimal
 	protected SoundEvent getDeathSound()
 	{
 		if(!isChild())
-			return TFC_Sounds.BEARDEATH;
+			return TFC_Sounds.BISONDEATH;
 		else
-			return TFC_Sounds.BEARCUBCRY;
+			return null; //TFC_Sounds.BISONCUBCRY;
 	}
 
 	/**

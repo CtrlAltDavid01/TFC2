@@ -2,58 +2,69 @@ package com.bioxx.tfc2.core;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
-import net.minecraft.nbt.NBTUtil;
+import net.minecraft.util.NonNullList;
 
 import com.bioxx.tfc2.Core;
+import com.bioxx.tfc2.api.interfaces.IFood;
 
 public class InventoryPlayerTFC extends InventoryPlayer {
 
-	public ItemStack[] extraEquipInventory = new ItemStack[Core.getExtraEquipInventorySize()];
+	public NonNullList<ItemStack> extraEquipInventory = NonNullList.<ItemStack>withSize(Core.getExtraEquipInventorySize(), ItemStack.EMPTY);
 
 	public InventoryPlayerTFC(EntityPlayer par1EntityPlayer) {
 		super(par1EntityPlayer);
 		this.player = par1EntityPlayer;
+		if(Core.getExtraEquipInventorySize() > 0)
+			this.allInventories.add(extraEquipInventory);
 	}
 
 	@Override
 	public int getSizeInventory()
 	{
-		return this.mainInventory.length + armorInventory.length + this.extraEquipInventory.length;
+		return super.getSizeInventory() + this.extraEquipInventory.size();
 	}
 
 	@Override
-	/**
-	 * Returns the stack in slot i
-	 */
+	public boolean isEmpty()
+	{
+		for (ItemStack itemstack : this.extraEquipInventory)
+		{
+			if (!itemstack.isEmpty())
+			{
+				return false;
+			}
+		}
+
+		return super.isEmpty();
+	}
+
+	public static boolean stackEqualExact(ItemStack stack1, ItemStack stack2)
+	{
+		return stack1.getItem() == stack2.getItem() && (!stack1.getHasSubtypes() || stack1.getMetadata() == stack2.getMetadata()) && 
+				(ItemStack.areItemStackTagsEqual(stack1, stack2) || (stack1.getItem() instanceof IFood && stack2.getItem() instanceof IFood && Food.areEqual(stack1, stack2)));
+	}
+
+	/*@Override
 	public ItemStack getStackInSlot(int par1)
 	{
-		ItemStack[] aitemstack = this.mainInventory;
-		if (par1 >= this.mainInventory.length + this.extraEquipInventory.length)
+		NonNullList<ItemStack> aitemstack = this.mainInventory;
+		if (par1 >= this.mainInventory.size() + this.extraEquipInventory.size())
 		{
-			par1 -= this.mainInventory.length + this.extraEquipInventory.length;
+			par1 -= this.mainInventory.size() + this.extraEquipInventory.size();
 			aitemstack = this.armorInventory;
 		}
-		else if(par1 >= this.mainInventory.length){
-			par1-= aitemstack.length;
+		else if(par1 >= this.mainInventory.size()){
+			par1-= aitemstack.size();
 			aitemstack = this.extraEquipInventory;
 		}
 		return aitemstack[par1];
 
-	}
+	}*/
 
-	/**
-	 * Removes matching items from the inventory.
-	 * @param itemIn The item to match, null ignores.
-	 * @param metadataIn The metadata to match, -1 ignores.
-	 * @param removeCount The number of items to remove. If less than 1, removes all matching items.
-	 * @param itemNBT The NBT data to match, null ignores.
-	 * @return The number of items removed from the inventory.
-	 */
-	@Override
+	/*@Override
 	public int clearMatchingItems(Item itemIn, int metadataIn, int removeCount, NBTTagCompound itemNBT)
 	{
 		int k = 0;
@@ -63,20 +74,20 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 
 		k = super.clearMatchingItems(itemIn, metadataIn, removeCount, itemNBT);
 
-		for(l = 0; l < this.extraEquipInventory.length; l++)
+		for(l = 0; l < this.extraEquipInventory.size(); l++)
 		{
 			itemstack = this.extraEquipInventory[l];
 
 			if (itemstack != null && (itemIn == null || itemstack.getItem() == itemIn) && (metadataIn <= -1 || itemstack.getMetadata() == metadataIn) && (itemNBT == null || (NBTUtil.areNBTEquals(itemNBT, itemstack.getTagCompound(), true))))
 			{
-				i1 = removeCount <= 0 ? itemstack.stackSize : Math.min(removeCount - k, itemstack.stackSize);
+				i1 = removeCount <= 0 ? itemstack.getMaxStackSize() : Math.min(removeCount - k, itemstack.getMaxStackSize());
 				k += i1;
 
 				if (removeCount != 0)
 				{
-					this.extraEquipInventory[l].stackSize -= i1;
+					this.extraEquipInventory[l].getMaxStackSize() -= i1;
 
-					if (this.extraEquipInventory[l].stackSize == 0)
+					if (this.extraEquipInventory[l].getMaxStackSize() == 0)
 					{
 						this.extraEquipInventory[l] = null;
 					}
@@ -90,32 +101,32 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 		}
 
 		return k;
-	}
+	}*/
 
-	@Override
+	/*@Override
 	public void decrementAnimations()
 	{
-		for (int i = 0; i < this.extraEquipInventory.length; ++i)
+		for (int i = 0; i < this.extraEquipInventory.size(); ++i)
 		{
 			if (this.extraEquipInventory[i] != null)
 			{
-				this.extraEquipInventory[i].updateAnimation(this.player.worldObj, this.player, i, this.currentItem == i);
+				this.extraEquipInventory[i].updateAnimation(this.player.world, this.player, i, this.currentItem == i);
 			}
 		}
 		super.decrementAnimations();
-	}
+	}*/
 
-	@Override
+	/*@Override
 	public ItemStack decrStackSize(int par1, int par2)
 	{
 		ItemStack[] aitemstack = this.mainInventory;
 
-		if (par1 >= this.mainInventory.length + this.extraEquipInventory.length)
+		if (par1 >= this.mainInventory.size() + this.extraEquipInventory.size())
 		{
 			aitemstack = this.armorInventory;
-			par1 -= this.mainInventory.length + this.extraEquipInventory.length;
+			par1 -= this.mainInventory.size() + this.extraEquipInventory.size();
 		}
-		else if(par1 >= this.mainInventory.length){
+		else if(par1 >= this.mainInventory.size()){
 			par1-= aitemstack.length;
 			aitemstack = this.extraEquipInventory;
 		}
@@ -125,7 +136,7 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 		{
 			ItemStack itemstack;
 
-			if (aitemstack[par1].stackSize <= par2)
+			if (aitemstack[par1].getMaxStackSize() <= par2)
 			{
 				itemstack = aitemstack[par1];
 				aitemstack[par1] = null;
@@ -135,7 +146,7 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 			{
 				itemstack = aitemstack[par1].splitStack(par2);
 
-				if (aitemstack[par1].stackSize == 0)
+				if (aitemstack[par1].getMaxStackSize() == 0)
 				{
 					aitemstack[par1] = null;
 				}
@@ -147,14 +158,14 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 		{
 			return null;
 		}
-	}
+	}*/
 
-	@Override
+	/*@Override
 	public void dropAllItems()
 	{
 		int i;
 
-		for (i = 0; i < this.extraEquipInventory.length; ++i)
+		for (i = 0; i < this.extraEquipInventory.size(); ++i)
 		{
 			if (this.extraEquipInventory[i] != null)
 			{
@@ -164,13 +175,13 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 		}
 		super.dropAllItems();
 	}
-
-	@Override
+	 */
+	/*@Override
 	public boolean hasItemStack(ItemStack par1ItemStack)
 	{
 		int i;
 
-		for (i = 0; i < this.extraEquipInventory.length; ++i)
+		for (i = 0; i < this.extraEquipInventory.size(); ++i)
 		{
 			if (this.extraEquipInventory[i] != null && this.extraEquipInventory[i].isItemEqual(par1ItemStack))
 			{
@@ -178,35 +189,28 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 			}
 		}
 		return super.hasItemStack(par1ItemStack);
-	}
+	}*/
 
-	@Override
+	/*@Override
 	public void setInventorySlotContents(int par1, ItemStack par2ItemStack)
 	{
 
 		ItemStack[] aitemstack = this.mainInventory;
 
-		if (par1 >= this.mainInventory.length + this.extraEquipInventory.length)
+		if (par1 >= this.mainInventory.size() + this.extraEquipInventory.size())
 		{
-			par1 -= this.mainInventory.length + this.extraEquipInventory.length;
+			par1 -= this.mainInventory.size() + this.extraEquipInventory.size();
 			aitemstack = this.armorInventory;
 		}
-		else if(par1 >= this.mainInventory.length){
+		else if(par1 >= this.mainInventory.size()){
 			par1-= aitemstack.length;
 			aitemstack = this.extraEquipInventory;
 		}
 
 		aitemstack[par1] = par2ItemStack;
-	}
+	}*/
 
-	/*
-	 * This method is currently never being called properly.
-	 * The copying of the extraEquipment is being handled with 
-	 * com.bioxx.tfc.Core.Player.PlayerInfo.tempEquipment
-	 * com.bioxx.tfc.Core.Player.PlayerTracker.onPlayerRespawn(PlayerRespawnEvent)
-	 * and com.bioxx.tfc.Handlers.EntityLivingHandler.onEntityDeath(LivingDeathEvent)
-	 */
-	@Override
+	/*@Override
 	public void copyInventory(InventoryPlayer par1InventoryPlayer)
 	{
 		if(par1InventoryPlayer instanceof InventoryPlayerTFC){
@@ -221,28 +225,27 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 	{
 		int i;
 
-		for (i = 0; i < this.extraEquipInventory.length; ++i)
+		for (i = 0; i < this.extraEquipInventory.size(); ++i)
 		{
 			this.extraEquipInventory[i] = ItemStack.copyItemStack(par1InventoryPlayer.extraEquipInventory[i]);
 		}
 		super.copyInventory(par1InventoryPlayer);
-	}
+	}*/
 
 	@Override
 	public void readFromNBT(NBTTagList par1NBTTagList)
 	{
 		super.readFromNBT(par1NBTTagList);
-		this.extraEquipInventory = new ItemStack[Core.getExtraEquipInventorySize()];
 
 		NBTTagList extraList = player.getEntityData().getTagList("ExtraInventory", 10);
 
 		for (int i = 0; i < extraList.tagCount(); ++i)
 		{
 			NBTTagCompound nbttagcompound = extraList.getCompoundTagAt(i);
-			ItemStack itemstack = ItemStack.loadItemStackFromNBT(nbttagcompound);
+			ItemStack itemstack = new ItemStack(nbttagcompound);
 			if (itemstack != null)
 			{
-				extraEquipInventory[i] = itemstack;
+				extraEquipInventory.add(itemstack);
 			}
 		}
 	}
@@ -255,9 +258,9 @@ public class InventoryPlayerTFC extends InventoryPlayer {
 		int i;
 		NBTTagCompound nbt;
 		NBTTagList tagList = new NBTTagList();
-		for (i = 0; i < extraEquipInventory.length; i++)
+		for (i = 0; i < extraEquipInventory.size(); i++)
 		{
-			ItemStack is = extraEquipInventory[i];
+			ItemStack is = extraEquipInventory.get(i);
 			if (is != null)
 			{
 				nbt = new NBTTagCompound();

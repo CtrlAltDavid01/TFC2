@@ -5,6 +5,7 @@ import java.util.Vector;
 import net.minecraft.util.math.BlockPos;
 
 import com.bioxx.jmapgen.IslandMap;
+import com.bioxx.jmapgen.IslandParameters.Feature;
 import com.bioxx.jmapgen.attributes.Attribute;
 import com.bioxx.jmapgen.attributes.CaveAttribute;
 import com.bioxx.jmapgen.graph.Center;
@@ -25,7 +26,11 @@ public class CaveProcessor
 	{
 		Vector<Center> land = getCentersBetween(map.centers, 0.02, 1.0);
 		Vector<Center> starts = new Vector<Center>();
-		int majorCavesToGen = 30;
+		int majorCavesToGen = 40;
+		if(map.getParams().hasFeature(Feature.DoubleCaves))
+			majorCavesToGen *= 2;
+		else if(map.getParams().hasFeature(Feature.TripleCaves))
+			majorCavesToGen *= 3;
 
 		if(land.size() == 0)
 			return;
@@ -86,7 +91,7 @@ public class CaveProcessor
 		this.gen(start, caveId, false, 50);
 	}
 
-	private void gen(Center start, int caveId, boolean isSeaCave, int maxLength)
+	public void gen(Center start, int caveId, boolean isSeaCave, int maxLength)
 	{
 		int minCaveSize = 2;
 		int maxCaveSize = 6;//This makes a cave have a 2-8 radius
@@ -120,7 +125,7 @@ public class CaveProcessor
 		CaveAttrNode curNode = new CaveAttrNode(caveId);//Start slightly above the ground
 		CaveAttrNode nextNode = new CaveAttrNode(caveId);
 		curNode.setOffset(new BlockPos(center.point.x, mcElev(start.getElevation()) + 3, center.point.y));
-
+		curNode.setEntrance(true);
 		//First form the mouth of the cave by either going straight down or at an angle.
 		//If the start hex is next to a cliff then move into that
 		if(mcElev(nextCenter.getElevation()) - mcElev(start.getElevation()) >= 8)
@@ -158,8 +163,7 @@ public class CaveProcessor
 			center = nextCenter;
 			//Finished cycling
 
-			curNode.setNodeHeight(minCaveSize+map.mapRandom.nextInt(maxCaveSize));
-			curNode.setNodeWidth(minCaveSize+map.mapRandom.nextInt(maxCaveSize));
+
 			if(mcElev(center.getElevation()) - curNode.offset.getY() > 20)
 			{
 				if(map.mapRandom.nextDouble() < 0.1)
@@ -199,13 +203,18 @@ public class CaveProcessor
 
 
 			//Acquire the next hex
-			nextCenter = center.getRandomNeighborExcept(map.mapRandom, prevCenter);
-
-			if(map.mapRandom.nextDouble() < 0.05)
+			if(map.mapRandom.nextDouble() < 0.05)//5% chance to move vertically in the same hex
 			{
 				nextCenter = center;
 				elevOffset = map.mapRandom.nextInt(31)-15;
 			}
+			else
+			{
+				nextCenter = center.getRandomNeighborExcept(map.mapRandom, prevCenter);
+			}
+
+			curNode.setNodeHeight(minCaveSize+map.mapRandom.nextInt(maxCaveSize));
+			curNode.setNodeWidth(minCaveSize+map.mapRandom.nextInt(maxCaveSize));
 
 			//Create our next node
 			nextNode = new CaveAttrNode(caveId);

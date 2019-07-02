@@ -2,6 +2,7 @@ package com.bioxx.jmapgen;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.Random;
 
 import net.minecraft.nbt.NBTTagCompound;
@@ -10,17 +11,17 @@ import com.bioxx.libnoise.NoiseQuality;
 import com.bioxx.libnoise.module.Module;
 import com.bioxx.libnoise.module.modifier.ScaleBias;
 import com.bioxx.libnoise.module.source.Perlin;
-import com.bioxx.tfc2.api.AnimalSpawnRegistry;
-import com.bioxx.tfc2.api.AnimalSpawnRegistry.SpawnGroup;
 import com.bioxx.tfc2.api.Crop;
 import com.bioxx.tfc2.api.types.ClimateTemp;
 import com.bioxx.tfc2.api.types.Moisture;
 import com.bioxx.tfc2.api.types.StoneType;
 import com.bioxx.tfc2.api.types.WoodType;
+import com.bioxx.tfc2.api.util.Helper;
 
 public class IslandParameters 
 {
 	protected Module shapeModule;
+	protected Module edgeModule;
 	double oceanRatio = 0.5;
 	public double lakeThreshold = 0.3;
 	int SIZE = 4096;
@@ -36,11 +37,13 @@ public class IslandParameters
 	private String treeCommon = WoodType.Ash.getName();
 	private String treeUncommon = WoodType.Ash.getName();
 	private String treeRare = WoodType.Ash.getName();
+	private String treeSwamp = WoodType.Ash.getName();
+
 	private Moisture moisture = Moisture.MEDIUM;
 	private ClimateTemp temp = ClimateTemp.TEMPERATE;
 	private ArrayList<Crop> cropList = new ArrayList<Crop>();
 
-	public ArrayList<SpawnGroup> animalSpawnGroups = new ArrayList<SpawnGroup>();
+	public ArrayList<String> animalTypes = new ArrayList<String>();
 
 	public IslandParameters() 
 	{
@@ -49,7 +52,7 @@ public class IslandParameters
 
 	public IslandParameters (long seed, int size, double oceans) 
 	{
-		this(seed, size, oceans, 0.3);
+		this(seed, size, oceans, 0.8);
 	}
 
 	// The Perlin-based island combines perlin noise with the radius
@@ -69,7 +72,7 @@ public class IslandParameters
 		Perlin modulePerl = new Perlin();
 		modulePerl.setSeed(seed);
 		modulePerl.setFrequency(0.00058);
-		modulePerl.setPersistence(0.7);
+		modulePerl.setPersistence(0.65);
 		modulePerl.setLacunarity(2.0);
 		modulePerl.setOctaveCount(5);
 		modulePerl.setNoiseQuality(NoiseQuality.BEST);
@@ -86,13 +89,43 @@ public class IslandParameters
 		sb2.setScale(0.25);
 
 		shapeModule = sb2;
+
+
+		Perlin modulePerl2 = new Perlin();
+		modulePerl2.setSeed(seed);
+		modulePerl2.setFrequency(0.58);
+		modulePerl2.setPersistence(0.25);
+		modulePerl2.setOctaveCount(3);
+
+		edgeModule = modulePerl2;
 	}
 
-	public boolean insidePerlin(Point q)
+	public boolean insidePerlin(Point q, boolean clamp)
 	{
 		Point np = new Point(2.3*(q.x/SIZE - 0.5), 2.3*(q.y/SIZE - 0.5));
 		double height = shapeModule.GetValue(q.x, 0, q.y);
+
+		double angle = getAngle(np);
+		double dist = 0.15 * edgeModule.GetValue(0, angle, 0);
+
+		double distOrigin = np.distance(Point.ORIGIN);
+
+		if(clamp && distOrigin < 0.65+dist)
+			return true;
+		if(clamp && distOrigin > 0.95+dist)
+			return false;
+
 		return height > oceanRatio+oceanRatio*np.getLength()*np.getLength();
+	}
+
+	private double getAngle(Point p)
+	{
+		double theta = Math.toDegrees(Math.atan2(p.y, p.x));
+
+		if (theta < 0.0) {
+			theta += 360.0;
+		}
+		return theta;
 	}
 
 	public int getXCoord()
@@ -103,6 +136,11 @@ public class IslandParameters
 	public int getZCoord()
 	{
 		return this.zCoord;
+	}
+
+	public int getCantorizedID()
+	{
+		return Helper.combineCoords(xCoord, zCoord);
 	}
 
 	public void setFeatures(Feature... f)
@@ -128,6 +166,27 @@ public class IslandParameters
 	public boolean hasFeature(Feature feat)
 	{
 		return features.contains(feat);
+	}
+
+	public boolean hasAnyFeatureOf(Feature... feat)
+	{
+		for(Feature f : feat)
+			if(features.contains(f))
+				return true;
+		return false;
+	}
+
+	public String featuresToString()
+	{
+		String s = "[";
+		Iterator<Feature> iter = features.iterator();
+		while(iter.hasNext())
+		{
+			Feature f = iter.next();
+			s += f.name() + ", ";
+		}
+		s+= "]";
+		return s;
 	}
 
 	public void setCoords(int x, int z) 
@@ -161,11 +220,17 @@ public class IslandParameters
 		return this.treeRare;
 	}
 
-	public void setTrees(String t0, String t1, String t2)
+	public String getSwampTree()
+	{
+		return this.treeSwamp;
+	}
+
+	public void setTrees(String t0, String t1, String t2, String swamp)
 	{
 		treeCommon = t0;
 		treeUncommon = t1;
 		treeRare = t2;
+		treeSwamp = swamp;
 	}
 
 	public Moisture getIslandMoisture()
@@ -210,6 +275,11 @@ public class IslandParameters
 		return false;
 	}
 
+	public double getMCBlockHeight()
+	{
+		return 1d / islandMaxHeight;
+	}
+
 	public void readFromNBT(NBTTagCompound nbt)
 	{
 		NBTTagCompound fnbt = nbt.getCompoundTag("features");
@@ -229,16 +299,15 @@ public class IslandParameters
 		this.moisture = Moisture.values()[nbt.getInteger("moisture")];
 		this.temp = ClimateTemp.values()[nbt.getInteger("temp")];
 		this.seed = nbt.getLong("seed");
-		this.animalSpawnGroups = new ArrayList<SpawnGroup>();
-		fnbt = nbt.getCompoundTag("spawnGroups");
-		for(int i = 0; i < fnbt.getSize(); i++)
+
+		this.animalTypes = new ArrayList<String>();
+		String animals = nbt.getString("animalTypes");
+		String[] split = animals.split(",");
+		for(int i = 0; i < split.length; i++)
 		{
-			SpawnGroup group = AnimalSpawnRegistry.getInstance().getGroupFromName(fnbt.getString("animal-"+i));
-			if(group != null)
-			{
-				animalSpawnGroups.add(group);
-			}
+			animalTypes.add(split[i]);
 		}
+
 		cropList.clear();
 		int[] cropArray = nbt.getIntArray("crops");
 		for(int i = 0; i < cropArray.length; i++)
@@ -269,12 +338,15 @@ public class IslandParameters
 		nbt.setInteger("temp", temp.ordinal());
 		nbt.setLong("seed", seed);
 
-		fnbt = new NBTTagCompound();
-		for(int i = 0; i < animalSpawnGroups.size(); i++)
+		String animals = "";
+		for(int i = 0; i < animalTypes.size(); i++)
 		{
-			fnbt.setString("animal-"+i, animalSpawnGroups.get(i).getGroupName());
+			animals += animalTypes.get(i);
+			if(i < animalTypes.size() - 1)
+				animals += ",";
 		}
-		nbt.setTag("spawnGroups", fnbt);
+		nbt.setString("animalTypes", animals);
+
 		int[] cropArray = new int[cropList.size()];
 		for(int i = 0; i < cropArray.length; i++)
 		{
@@ -286,8 +358,8 @@ public class IslandParameters
 	public enum Feature
 	{
 		Gorges(1, "Gorges"), 
-		Volcano(0.001, "Volcano"), 
-		Cliffs(1, "Cliffs"), 
+		Volcano(0.001, "Volcano", false), 
+		Cliffs(0.75, "Cliffs"), 
 		SharperMountains(1, "Sharper Mountains"), 
 		EvenSharperMountains(1, "Even Sharper Mountains"), 
 		Valleys(0.6, "Valleys"), 
@@ -301,7 +373,11 @@ public class IslandParameters
 		NutrientRich(0.5,"Nutrient Rich", FeatureSig.Minor),
 		Desert(0.0,"Desert", false),
 		DiverseCrops(0.5,"Diverse Crops", FeatureSig.Minor),
-		RampantWildAnimals(0.25,"Rampant Wild Animals", FeatureSig.Minor);
+		RampantWildAnimals(0.25,"Rampant Wild Animals", FeatureSig.Minor),
+		Mesas(0.25,"Mesas"),
+		DoubleCaves(0.25,"DoubleCaves"),
+		TripleCaves(0.10,"TripleCaves");
+
 
 		public final double rarity;
 		private String name;
@@ -354,10 +430,11 @@ public class IslandParameters
 
 		public static Feature getRandomFeature(FeatureSig sig)
 		{
-			if(sig == FeatureSig.Major)
+			if(sig == FeatureSig.Major && potMajor.size() > 0)
 				return potMajor.next();
-			else
+			else if(potMinor.size() > 0)
 				return potMinor.next();
+			return null;
 		}
 
 		@Override

@@ -1,5 +1,7 @@
 package com.bioxx.tfc2;
 
+import java.util.ArrayList;
+
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.resources.I18n;
@@ -8,22 +10,31 @@ import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.NonNullList;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.SoundCategory;
 import net.minecraft.util.SoundEvent;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.ChunkCache;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.IChunkProvider;
 
 import com.bioxx.jmapgen.IslandMap;
+import com.bioxx.jmapgen.attributes.Attribute;
 import com.bioxx.jmapgen.graph.Center;
+import com.bioxx.jmapgen.graph.Center.Marker;
+import com.bioxx.tfc2.api.Global;
+import com.bioxx.tfc2.api.SizeWeightRegistry;
 import com.bioxx.tfc2.api.types.WoodType;
 import com.bioxx.tfc2.blocks.*;
 import com.bioxx.tfc2.core.FoodStatsTFC;
 import com.bioxx.tfc2.core.InventoryPlayerTFC;
+import com.bioxx.tfc2.core.PlayerSkillData;
 import com.bioxx.tfc2.core.PortalSchematic;
 import com.bioxx.tfc2.world.WorldGen;
 import org.apache.commons.lang3.text.WordUtils;
@@ -35,7 +46,7 @@ public class Core
 	{
 		BlockPos blockpos1;
 
-		for (blockpos1 = new BlockPos(pos.getX(), 63, pos.getZ()); !world.isAirBlock(blockpos1.up()); blockpos1 = blockpos1.up())
+		for (blockpos1 = new BlockPos(pos.getX(), Global.SEALEVEL, pos.getZ()); !world.isAirBlock(blockpos1.up()); blockpos1 = blockpos1.up())
 		{
 			;
 		}
@@ -79,7 +90,7 @@ public class Core
 
 	public static String textConvert(String s)
 	{
-		return WordUtils.capitalize(s, '_').replaceAll("_", " ");
+		return s.replaceAll("_", " ");
 	}
 
 	public static String[] capitalizeStringArray(String[] array)
@@ -105,6 +116,11 @@ public class Core
 		return new ResourceLocation(s);
 	}
 
+	public static ResourceLocation CreateRes(String modid, String s)
+	{
+		return new ResourceLocation(modid+"."+s);
+	}
+
 	public static boolean isGrass(IBlockState state)
 	{
 		if(state.getBlock() == TFCBlocks.Grass)
@@ -123,12 +139,20 @@ public class Core
 
 	public static boolean isSoil(IBlockState state)
 	{
-		return isGrass(state) || isDirt(state);
+		return isGrass(state) || isDirt(state) || state.getBlock() == TFCBlocks.Farmland || state.getBlock() == Blocks.CLAY;
 	}
 
 	public static boolean isSand(IBlockState state)
 	{
 		if(state.getBlock() == TFCBlocks.Sand)
+			return true;
+
+		return false;
+	}
+
+	public static boolean isWater(IBlockState state)
+	{
+		if(state.getBlock() == Blocks.WATER || state.getBlock() == Blocks.FLOWING_WATER)
 			return true;
 
 		return false;
@@ -152,7 +176,7 @@ public class Core
 
 	public static boolean isTerrain(IBlockState state)
 	{
-		return isSoil(state) || isSand(state) || isStone(state) || isGravel(state);
+		return isSoil(state) || isSand(state) || isStone(state) || isGravel(state)|| state.getBlock() == Blocks.STONE;
 	}
 
 	public static boolean isNaturalLog(IBlockState state)
@@ -160,27 +184,10 @@ public class Core
 		return state.getBlock() == TFCBlocks.LogNatural || state.getBlock() == TFCBlocks.LogNatural2 || state.getBlock() == TFCBlocks.LogNaturalPalm;
 	}
 
-	/**
-	 * 
-	 * @param w
-	 * @param pos
-	 * @return
-	 */
-	public static float getMoistureFromChunk(ChunkCache w, BlockPos pos)
+	public static boolean isPlacedLog(IBlockState state)
 	{
-		Chunk c = w.worldObj.getChunkFromBlockCoords(pos);
-		byte[] moistureArray = c.getBiomeArray();
-		byte b = moistureArray[(pos.getZ() & 0xF) << 4 | (pos.getX() & 0xF)];
-		int s = (b & 0xFF);
-		return (float)s / 255F;
-	}
-
-	public static float getMoistureFromChunk(Chunk c, BlockPos pos)
-	{
-		byte[] moistureArray = c.getBiomeArray();
-		byte b = moistureArray[(pos.getZ() & 0xF) << 4 | (pos.getX() & 0xF)];
-		int s = (b & 0xFF);
-		return (float)s / 255F;
+		return state.getBlock() == TFCBlocks.LogVertical || state.getBlock() == TFCBlocks.LogVertical2 || 
+				state.getBlock() == TFCBlocks.LogHorizontal || state.getBlock() == TFCBlocks.LogHorizontal2 || state.getBlock() == TFCBlocks.LogHorizontal3;
 	}
 
 	public static void bindTexture(ResourceLocation texture)
@@ -208,23 +215,6 @@ public class Core
 		return true;
 	}
 
-	/**
-	 * If this is modified in any way, setPlayerFoodStats should be called to save the data back 
-	 * to players nbt or the changes will be lost.
-	 * @return Returns the FoodStatsTFC object that is associated with this player. 
-	 */
-	public static FoodStatsTFC getPlayerFoodStats(EntityLivingBase player)
-	{
-		FoodStatsTFC foodstats = new FoodStatsTFC((EntityPlayer)player);
-		foodstats.readNBT(player.getEntityData());
-		return foodstats;
-	}
-
-	public static void setPlayerFoodStats(EntityPlayer player, FoodStatsTFC foodstats)
-	{
-		foodstats.writeNBT(player.getEntityData());
-	}
-
 	public static IBlockState getPlanks(WoodType w)
 	{
 		if(w.getMeta() >= 16)
@@ -237,8 +227,8 @@ public class Core
 		if(w == WoodType.Palm)
 			return TFCBlocks.LogNaturalPalm.getDefaultState();
 		if(w.getMeta() >= 16)
-			return TFCBlocks.LogNatural2.getDefaultState().withProperty(BlockLogNatural2.META_PROPERTY, w);
-		return TFCBlocks.LogNatural.getDefaultState().withProperty(BlockLogNatural.META_PROPERTY, w);
+			return TFCBlocks.LogNatural2.getDefaultState().withProperty(BlockLogNatural2.WOOD, w);
+		return TFCBlocks.LogNatural.getDefaultState().withProperty(BlockLogNatural.WOOD, w);
 	}
 
 	public static IBlockState getLeaves(WoodType w)
@@ -257,6 +247,14 @@ public class Core
 		return WorldGen.getInstance().getIslandMap(pos.getX() >> 12, pos.getZ() >> 12);
 	}
 
+	public static void giveItem(World world, EntityPlayer player, BlockPos pos, ItemStack is)
+	{
+		if(!player.inventory.addItemStackToInventory(is))
+		{
+			dropItem(world, pos, is);
+		}
+	}
+
 	public static void dropItem(World world, BlockPos pos, ItemStack is)
 	{
 		dropItem(world, (double)pos.getX()+0.5, (double)pos.getY(), (double)pos.getZ()+0.5, is);
@@ -267,12 +265,12 @@ public class Core
 		ei.motionX = -0.07+world.rand.nextFloat() * 0.14;
 		ei.motionY = 0.15;
 		ei.motionZ = -0.07+world.rand.nextFloat() * 0.14;
-		world.spawnEntityInWorld(ei);
+		world.spawnEntity(ei);
 	}
 
 	public static void playSoundAtEntity(Entity e, SoundEvent name, float volume, float pitch)
 	{
-		e.worldObj.playSound(e.posX, e.posY, e.posZ, name, SoundCategory.BLOCKS, volume, pitch, false);
+		e.world.playSound(e.posX, e.posY, e.posZ, name, SoundCategory.BLOCKS, volume, pitch, false);
 	}
 
 	public static boolean isCenterInRect(Center c, int x, int z, int xRange, int zRange)
@@ -280,5 +278,91 @@ public class Core
 		if(c.point.x >= x && c.point.x < x+xRange && c.point.y >= z && c.point.y < z+zRange)
 			return true;
 		return false;
+	}
+
+	public static PlayerSkillData getPlayerSkillData(EntityLivingBase entity)
+	{
+		PlayerSkillData data = new PlayerSkillData((EntityPlayer)entity);
+		data.readNBT(entity.getEntityData());
+		return data;
+	}
+
+	public static void setPlayerSkillData(EntityPlayer player, PlayerSkillData data)
+	{
+		data.writeNBT(player.getEntityData());
+	}
+
+	public static FoodStatsTFC getPlayerFoodStats(EntityPlayer player)
+	{
+		FoodStatsTFC fs = new FoodStatsTFC(player);
+		fs.readNBT(player.getEntityData());
+		return fs;
+	}
+
+	public static boolean isFreshWater( World world, BlockPos pos)
+	{
+		if(pos.getY() > 64)
+			return true;
+		IslandMap map = Core.getMapForWorld(world, pos);
+		Center closest = map.getClosestCenter(pos);
+
+		if(closest.hasMarker(Marker.Ocean))
+			return false;
+
+		if(closest.hasAnyMarkersOf(Marker.Pond, Marker.Water))
+			return true;
+
+		if(closest.hasAttribute(Attribute.River))
+			return true;
+
+		if(closest.hasAttribute(Attribute.Lake))
+			return true;
+
+		return false;
+	}
+
+	public static boolean isHexFullyLoaded(World world, IslandMap map, Center c)
+	{
+		return world.isAreaLoaded(c.point.toBlockPos().add(map.getParams().getWorldX(), 0, map.getParams().getWorldZ()), 20);
+	}
+
+	public static ArrayList<BlockPos> getBlockPosInAABB(AxisAlignedBB aabb)
+	{
+		ArrayList<BlockPos> out = new ArrayList<BlockPos>();
+		for(int x = (int) aabb.minX; x < aabb.maxX; x++)
+		{
+			for(int y = (int) aabb.minY; y < aabb.maxY; y++)
+			{
+				for(int z = (int) aabb.minZ; z < aabb.maxZ; z++)
+				{
+					out.add(new BlockPos(x, y, z));
+				}
+			}
+		}
+		return out;
+	}
+
+	public static boolean areChunksLoadedInArea(IChunkProvider provider, ChunkPos min, ChunkPos max)
+	{
+		for(int x = min.chunkXPos; x <= max.chunkXPos; x++)
+		{
+			for(int z = min.chunkZPos; z <= max.chunkZPos; z++)
+			{
+				if(provider.getLoadedChunk(x, z) == null)
+					return false;
+			}
+		}
+		return true;
+	}
+
+	public static int getEncumbrance(NonNullList<ItemStack> stackList)
+	{
+		int out = 0;
+		for(ItemStack i :stackList)
+		{
+			if(!i.isEmpty())
+				out += SizeWeightRegistry.GetInstance().getProperty(i).weight.encumbrance;
+		}
+		return out;
 	}
 }

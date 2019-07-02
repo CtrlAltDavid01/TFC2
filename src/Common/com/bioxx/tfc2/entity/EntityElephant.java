@@ -48,7 +48,7 @@ public class EntityElephant extends EntityAnimal
 	}
 
 	@Override
-	protected void updateAITick ()
+	protected void updateAITasks()
 	{
 		//getDataManager().set (18, getHealth());
 		this.motionY += 0.03999999910593033D;
@@ -119,9 +119,9 @@ public class EntityElephant extends EntityAnimal
 	@Override
 	protected SoundEvent getAmbientSound ()
 	{
-		if(isChild() && worldObj.rand.nextInt(100) < 5)
+		if(isChild() && world.rand.nextInt(100) < 5)
 			return TFC_Sounds.BEARCUBCRY;
-		else if(worldObj.rand.nextInt(100) < 5)
+		else if(world.rand.nextInt(100) < 5)
 			return TFC_Sounds.BEARCRY;
 
 		return isChild() ? null : TFC_Sounds.BEARSAY;

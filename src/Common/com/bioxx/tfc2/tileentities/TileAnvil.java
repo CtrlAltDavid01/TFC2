@@ -1,14 +1,14 @@
 package com.bioxx.tfc2.tileentities;
 
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.UUID;
 
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.model.IBakedModel;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.init.Items;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
@@ -16,7 +16,9 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ITickable;
+import net.minecraft.util.NonNullList;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.ITextComponent;
 import net.minecraft.world.World;
 
@@ -27,6 +29,8 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import com.bioxx.tfc2.Core;
 import com.bioxx.tfc2.Reference;
 import com.bioxx.tfc2.TFC;
+import com.bioxx.tfc2.api.crafting.CraftingManagerTFC;
+import com.bioxx.tfc2.api.crafting.CraftingManagerTFC.RecipeType;
 import com.bioxx.tfc2.api.properties.PropertyItem;
 import com.bioxx.tfc2.api.util.Helper;
 import com.bioxx.tfc2.blocks.BlockAnvil;
@@ -37,19 +41,19 @@ import com.bioxx.tfc2.networking.server.SAnvilCraftingPacket;
 public class TileAnvil extends TileTFC implements ITickable, IInventory
 {
 	UUID smithID;
-	ItemStack[] inventory;
+	NonNullList<ItemStack> inventory = NonNullList.<ItemStack>withSize(2, ItemStack.EMPTY);
 	AnvilStrikePoint[] hitArray;
 	int anvilRecipeIndex = -1;
-	int timer = 0;
-	LinkedList<Integer> availableHitPoints = new LinkedList<Integer>();
+	int craftingTimer = 0;
+	int craftingProgress = 0;
+	AnvilStrikeType strikeTarget;
+	ArrayList<Integer> availableHitPoints = new ArrayList<Integer>();
 
 	public TileAnvil()
 	{
 		smithID = new UUID(0L, 0L);
-		inventory = new ItemStack[3];
-		inventory[0] = new ItemStack(Items.IRON_INGOT, 2);
-		//inventory[1] = new ItemStack(Items.GOLD_INGOT);
 		hitArray = new AnvilStrikePoint[24];
+
 	}
 
 	/***********************************************************************************
@@ -59,17 +63,33 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 	public void update() 
 	{
 		Timekeeper time = Timekeeper.getInstance();
-		if(timer > 0)
-			timer--;
-		if(!worldObj.isRemote && timer >0 && timer%10 == 0)
+		if(craftingTimer > 0)
+			craftingTimer--;
+
+		generateStrikePoints();
+
+		resetStrikePoints();
+
+		if(craftingTimer == 0 && craftingProgress >= 10)
+			endCrafting(CraftingResult.SUCCEED);
+		else if(craftingTimer == 0)
+			endCrafting(CraftingResult.FAILED);
+	}
+
+	protected void generateStrikePoints()
+	{
+		Timekeeper time = Timekeeper.getInstance();
+		if(!world.isRemote && craftingTimer > 0 && craftingTimer % 10 == 0)
 		{
 			AnvilStrikePoint p = new AnvilStrikePoint();
+
 			p.setBirthTime(time.getTotalTicks());
-			if(worldObj.rand.nextFloat() < 0.25)
+			//Create Specials
+			if(world.rand.nextFloat() < 0.25)
 			{
-				if(worldObj.rand.nextFloat() < 0.25)
+				if(world.rand.nextFloat() < 0.25)
 				{
-					int type = worldObj.rand.nextInt(3);
+					int type = world.rand.nextInt(3);
 					if(type == 0)
 						p.setType(AnvilStrikeType.EFF_CRIT);
 					else if(type == 1)
@@ -83,7 +103,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 				}
 				else
 				{
-					int type = worldObj.rand.nextInt(3);
+					int type = world.rand.nextInt(3);
 					if(type == 0)
 						p.setType(AnvilStrikeType.EFF_NORM);
 					else if(type == 1)
@@ -98,7 +118,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 			}
 			else
 			{
-				int type = worldObj.rand.nextInt(7);
+				int type = world.rand.nextInt(7);
 				if(type == 0)
 					p.setType(AnvilStrikeType.HIT_LIGHT);
 				else if(type == 1)
@@ -113,34 +133,91 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 					p.setType(AnvilStrikeType.HIT_PUNCH);
 				else if(type == 6)
 					p.setType(AnvilStrikeType.HIT_SHRINK);
+
+				p.setLifeTime(100);
 			}
 
-			int xz = worldObj.rand.nextInt(availableHitPoints.size());
 
-			if(this.getStrikePoint(availableHitPoints.get(xz)) == null)
+			int xz = world.rand.nextInt(availableHitPoints.size());
+			int index = availableHitPoints.remove(xz);
+
+			if(this.getStrikePoint(index) == null)
 			{
-				this.setStrikePoint(xz, p);
-				sendSmithingPacket(xz, p);
+				this.setStrikePoint(index, p);
+				sendSmithingPacket(index, p);
 			}
-
-
 		}
+	}
 
-		for(int i = 0; i < 24; i++)
+	protected void resetStrikePoints()
+	{
+		Timekeeper time = Timekeeper.getInstance();
+		if(craftingTimer <= 0)
 		{
-			AnvilStrikePoint p = hitArray[i];
-			if(p != null && p.getBirthTime()+p.getLifeTime() < time.getTotalTicks())
+			for(int i = 0; i < 24; i++)
 			{
-				hitArray[i] = null;
+				AnvilStrikePoint p = hitArray[i];
+				if(p != null)
+				{
+					resetStrikePoint(i);
+				}
 			}
+		}
+		else
+		{
+			for(int i = 0; i < 24; i++)
+			{
+				AnvilStrikePoint p = hitArray[i];
+				if(p != null && p.getBirthTime()+p.getLifeTime() < time.getTotalTicks())
+				{
+					resetStrikePoint(i);
+				}
+			}
+		}
+	}
 
+	public boolean resetStrikePoint(int index)
+	{
+		if(index < 24 && this.getStrikePoint(index) != null)
+		{
+			this.setStrikePoint(index, null);
+			this.availableHitPoints.add(index);
+			return true;
+		}
+		return false;
+	}
+
+	public void hitStrikePoint(int index)
+	{
+		craftingProgress++;
+		resetStrikePoint(index);
+	}
+
+	public void endCrafting(CraftingResult r)
+	{
+		craftingTimer = -1;//This effectively turns off crafting stuff when we're done
+
+		switch(r)
+		{
+		case SUCCEED:
+			//Create the final item
+			this.setInventorySlotContents(1, ItemStack.EMPTY);
+			this.setInventorySlotContents(0, CraftingManagerTFC.getInstance().getRecipeList(RecipeType.ANVIL).get(anvilRecipeIndex).getRecipeOutput().copy());
+			//world.setBlockState(pos, this.blockType.getExtendedState(world.getBlockState(pos), world, pos), 0x2);
+			break;
+		case FAILED:
+			//Do something if the smith fails
+			break;
 		}
 
+		anvilRecipeIndex = -1;//Resets the selected recipe
+
+		//Send a packet to reset the info for the client
 	}
 
 	public void sendSmithingPacket(int xz, AnvilStrikePoint point)
 	{
-		EntityPlayerMP player = worldObj.getMinecraftServer().getPlayerList().getPlayerByUUID(smithID);
+		EntityPlayerMP player = world.getMinecraftServer().getPlayerList().getPlayerByUUID(smithID);
 		if(player != null)
 			TFC.network.sendTo(new CAnvilStrikePacket(this.getPos(), xz, point), player);
 	}
@@ -159,9 +236,9 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 		EnumFacing facing = state.getValue(BlockAnvil.FACING);
 		ItemStack stack = getStackInSlot(0);
 		float x = 0, z = 0;
-		if(stack != null) 
+		if(stack != ItemStack.EMPTY) 
 		{
-			if(getStackInSlot(1) != null)
+			if(getStackInSlot(1) != ItemStack.EMPTY)
 			{
 				if(facing == EnumFacing.NORTH)
 					x = 0.25f;
@@ -172,16 +249,16 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 				else
 					z= -0.25f;
 			}
-			PropertyItem.PItem item = getAnvilItem(stack, worldObj, null, x, z);
+			PropertyItem.PItem item = getAnvilItem(stack, world, null, x, z);
 			if(item != null) {
 				toDisplay.items.add(item);
 			}
 		}
 		stack = getStackInSlot(1);
 		x = 0; z = 0;
-		if(stack != null) 
+		if(stack != ItemStack.EMPTY) 
 		{
-			if(getStackInSlot(0) != null)
+			if(getStackInSlot(0) != ItemStack.EMPTY)
 			{
 				if(facing == EnumFacing.NORTH)
 					x = -0.25f;
@@ -192,7 +269,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 				else
 					z = 0.25f;
 			}
-			PropertyItem.PItem item = getAnvilItem(stack, worldObj, null, x, z);
+			PropertyItem.PItem item = getAnvilItem(stack, world, null, x, z);
 			if(item != null) {
 				toDisplay.items.add(item);
 			}
@@ -229,23 +306,31 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 
 	public void startCrafting(UUID id)
 	{
-		if(worldObj.isRemote)
+		if(anvilRecipeIndex == -1)
+			return;
+		if(world.isRemote)
 		{
 			TFC.network.sendToServer(new SAnvilCraftingPacket(this.getPos(),this.getAnvilRecipeIndex(), true, id));
-			this.timer = 2000;
+			this.craftingTimer = 500;
 		}
 		else
 		{
-			if(timer <= 0)
+			if(craftingTimer <= 0)
 			{
 				this.smithID = id;
-				this.timer = 2000;
+				this.craftingTimer = 500;
 				for(int i = 0; i < 24; i++)
 				{
 					availableHitPoints.add(i);
 				}
 			}
 		}
+	}
+
+	@Override
+	public boolean shouldRefresh(World world, BlockPos pos, IBlockState oldState, IBlockState newSate)
+	{
+		return false;
 	}
 
 	/***********************************************************************************
@@ -259,7 +344,9 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 
 	public EntityPlayer getSmith()
 	{
-		return worldObj.getMinecraftServer().getPlayerList().getPlayerByUUID(smithID);
+		if(!world.isRemote)
+			return world.getMinecraftServer().getPlayerList().getPlayerByUUID(smithID);
+		else return TFC.proxy.getPlayer();
 	}
 
 	public void setStrikePoint(int index, AnvilStrikePoint point)
@@ -276,6 +363,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 
 	public AnvilStrikePoint getStrikePoint(int index)
 	{
+		if(index < 0 || index > 23) return null;
 		return hitArray[index];
 	}
 
@@ -293,17 +381,21 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 		return anvilRecipeIndex;
 	}
 
-
 	public void setAnvilRecipeIndex(int anvilRecipeIndex) {
 		this.anvilRecipeIndex = anvilRecipeIndex;
 	}
 
 	public int getTimer() {
-		return timer;
+		return craftingTimer;
 	}
 
 	public void setTimer(int timer) {
-		this.timer = timer;
+		this.craftingTimer = timer;
+	}
+
+	public NonNullList<ItemStack> getInventory()
+	{
+		return this.inventory;
 	}
 
 	/***********************************************************************************
@@ -357,35 +449,35 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 
 	@Override
 	public int getSizeInventory() {
-		return 3;
+		return this.inventory.size();
 	}
 
 	@Override
 	public ItemStack getStackInSlot(int index) {
 		if(index < getSizeInventory())
-			return inventory[index];
-		return null;
+			return inventory.get(index);
+		return ItemStack.EMPTY;
 	}
 
 	@Override
 	public ItemStack decrStackSize(int index, int count) 
 	{
-		if(inventory[index] != null)
+		if(inventory.get(index) != ItemStack.EMPTY)
 		{
-			if(inventory[index].stackSize <= count)
+			if(inventory.get(index).getMaxStackSize() <= count)
 			{
-				ItemStack itemstack = inventory[index];
-				inventory[index] = null;
-				TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getDescriptionPacket());
+				ItemStack itemstack = inventory.get(index);
+				inventory.set(index, ItemStack.EMPTY);
+				TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getUpdatePacket());
 				return itemstack;
 			}
-			ItemStack itemstack1 = inventory[index].splitStack(count);
-			if(inventory[index].stackSize == 0)
-				inventory[index] = null;
+			ItemStack itemstack1 = inventory.get(index).splitStack(count);
+			if(inventory.get(index).getMaxStackSize() == 0)
+				inventory.set(index, ItemStack.EMPTY);
 			return itemstack1;
 		}
 		else
-			return null;
+			return ItemStack.EMPTY;
 	}
 
 	@Override
@@ -393,12 +485,12 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 	{
 		if(index < getSizeInventory())
 		{
-			ItemStack out = inventory[index];
-			inventory[index] = null;
-			TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getDescriptionPacket());
+			ItemStack out = inventory.get(index);
+			inventory.set(index, ItemStack.EMPTY);
+			TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getUpdatePacket());
 			return out;
 		}
-		return null;
+		return ItemStack.EMPTY;
 	}
 
 	@Override
@@ -406,8 +498,9 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 	{
 		if(index < getSizeInventory())
 		{
-			inventory[index] = stack;
-			TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getDescriptionPacket());
+			inventory.set(index, stack);
+			TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getUpdatePacket());//Is this needed?
+			world.markBlockRangeForRenderUpdate(getPos(), getPos());
 		}
 	}
 
@@ -418,8 +511,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 	}
 
 	@Override
-	public boolean isUseableByPlayer(EntityPlayer player) 
-	{
+	public boolean isUsableByPlayer(EntityPlayer player) {
 		return true;
 	}
 
@@ -427,7 +519,11 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 	public void openInventory(EntityPlayer player) {}
 
 	@Override
-	public void closeInventory(EntityPlayer player) {}
+	public void closeInventory(EntityPlayer player) 
+	{
+		TFC.proxy.sendToAllNear(getWorld(), getPos(), 200, this.getUpdatePacket());
+		player.world.markBlockRangeForRenderUpdate(getPos(), getPos().add(1, 1, 1));
+	}
 
 	@Override
 	public boolean isItemValidForSlot(int index, ItemStack stack) {return true;}
@@ -446,7 +542,7 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 		if(id == 0)
 		{
 			this.setAnvilRecipeIndex(value);
-			if(worldObj.isRemote)
+			if(world.isRemote)
 			{
 				TFC.network.sendToServer(new SAnvilCraftingPacket(this.getPos(), this.getAnvilRecipeIndex(), false, this.smithID));
 			}
@@ -460,7 +556,10 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 
 	@Override
 	public void clear() {
-
+		for(int i = 0; i < this.getSizeInventory(); i++)
+		{
+			this.setInventorySlotContents(i, ItemStack.EMPTY);
+		}
 	}
 
 	/*********************************************************
@@ -521,5 +620,16 @@ public class TileAnvil extends TileTFC implements ITickable, IInventory
 		{
 			return texture;
 		}
+	}
+
+	public enum CraftingResult
+	{
+		SUCCEED, FAILED;
+	}
+
+	@Override
+	public boolean isEmpty() {
+		// TODO Auto-generated method stub
+		return false;
 	}
 }

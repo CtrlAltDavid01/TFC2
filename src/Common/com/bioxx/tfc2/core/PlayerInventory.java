@@ -20,7 +20,7 @@ import com.bioxx.tfc2.containers.slots.SlotForShowOnly;
 public class PlayerInventory
 {
 	public static int invXSize = 176;
-	public static int invYSize = 87;
+	public static int invYSize = 90;
 	private static ResourceLocation invTexture = new ResourceLocation(Reference.ModID, Reference.AssetPathGui + "gui_inventory_lower.png");
 	public static InventoryCrafting containerInv;
 	private static int index;
@@ -72,7 +72,7 @@ public class PlayerInventory
 				NBTTagCompound nbttagcompound1 = nbttaglist.getCompoundTagAt(i);
 				byte byte0 = nbttagcompound1.getByte("Slot");
 				if(byte0 >= 0 && byte0 < 8)
-					containerInv.setInventorySlotContents(byte0, ItemStack.loadItemStackFromNBT(nbttagcompound1));
+					containerInv.setInventorySlotContents(byte0, new ItemStack(nbttagcompound1));
 			}
 		}
 	}
@@ -108,7 +108,7 @@ public class PlayerInventory
 	{
 		par1Slot.slotNumber = container.inventorySlots.size();
 		container.inventorySlots.add(par1Slot);
-		container.inventoryItemStacks.add((ItemStack)null);
+		container.inventoryItemStacks.add(ItemStack.EMPTY);
 		return par1Slot;
 	}
 
@@ -116,16 +116,22 @@ public class PlayerInventory
 	{
 		Core.bindTexture(invTexture);
 		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-		int l = (screenWidth - invXSize) / 2;
-		int i1 = (screenHeight - (upperGuiHeight+invYSize)) / 2 + upperGuiHeight;
-		container.drawTexturedModalRect(l, i1, 0, 0, invXSize, invYSize);
-		//container.drawTexturedModalRect(l+invXSize, i1+1, 0, 87, 83, 83);
-		/*ItemStack is = getInventory(container.mc.thePlayer).extraEquipInventory[0];
-		if(is != null)
-		{
-			if(is.getItem() instanceof ItemQuiver)
-				container.drawTexturedModalRect(l+invXSize, i1+1, 84, 87, 47, 83);
-		}*/
+		int guiX = (screenWidth - invXSize) / 2;
+		int guiY = (screenHeight - (upperGuiHeight+invYSize)) / 2 + upperGuiHeight;
+		container.drawTexturedModalRect(guiX, guiY, 0, 0, invXSize, invYSize);
+
+		//encumbrance bar
+		float eMult = Math.min(Core.getEncumbrance(net.minecraft.client.Minecraft.getMinecraft().player.inventory.mainInventory) / 80f, 1.0f);
+		if(eMult < 0.5)
+			GL11.glColor4f(0.0F, 0.8F, 0.0F, 1.0F);
+		else if(eMult < 0.75)
+			GL11.glColor4f(1.0F, 0.8F, 0.0F, 1.0F);
+		else
+			GL11.glColor4f(0.8F, 0.0F, 0.0F, 1.0F);
+		container.drawTexturedModalRect(guiX+8, guiY+5, 2, 245, (int)(160 * eMult), 3);
+		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+		//encumbrance meter
+		container.drawTexturedModalRect(guiX+7, guiY+4, 1, 249, 162, 5);
 	}
 
 	/*public static InventoryPlayerTFC getInventory(EntityPlayer p)
@@ -137,11 +143,11 @@ public class PlayerInventory
 	{
 		if(player.getEntityData().hasKey("craftingTable"))
 		{
-			player.inventoryContainer.getSlot(45).xDisplayPosition += 50000;
-			player.inventoryContainer.getSlot(46).xDisplayPosition += 50000;
-			player.inventoryContainer.getSlot(47).xDisplayPosition += 50000;
-			player.inventoryContainer.getSlot(48).xDisplayPosition += 50000;
-			player.inventoryContainer.getSlot(49).xDisplayPosition += 50000;
+			player.inventoryContainer.getSlot(45).xPos += 50000;
+			player.inventoryContainer.getSlot(46).xPos += 50000;
+			player.inventoryContainer.getSlot(47).xPos += 50000;
+			player.inventoryContainer.getSlot(48).xPos += 50000;
+			player.inventoryContainer.getSlot(49).xPos += 50000;
 		}
 	}
 

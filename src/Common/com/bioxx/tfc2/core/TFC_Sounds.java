@@ -29,6 +29,10 @@ public class TFC_Sounds
 	public static SoundEvent BEARCUBCRY;
 	public static SoundEvent BEARHURT;
 	public static SoundEvent BEARDEATH;
+	public static SoundEvent BISONSAY;
+	public static SoundEvent BISONCRY;
+	public static SoundEvent BISONHURT;
+	public static SoundEvent BISONDEATH;
 	public static SoundEvent PHAESANTSAY;
 	public static SoundEvent PHAESANTCHICKSAY;
 	public static SoundEvent PHAESANTHURT;
@@ -42,6 +46,13 @@ public class TFC_Sounds
 	public static SoundEvent LIONHURT;
 	public static SoundEvent LIONDEATH;
 	public static SoundEvent KNAPPING;
+	public static SoundEvent ELKHORNS;
+	public static SoundEvent ELKCRY;
+	public static SoundEvent ELKHURT;
+	public static SoundEvent ELKDEATH;
+	public static SoundEvent ELKCUBCRY;
+	public static SoundEvent ELKCUBHURT;
+	public static SoundEvent ELKCUBDEATH;
 
 	public static SoundEvent TFCMUSIC;
 
@@ -65,6 +76,10 @@ public class TFC_Sounds
 		BEARCUBCRY = createSound("mob.bear.cub.cry");
 		BEARHURT = createSound("mob.bear.hurt");
 		BEARDEATH = createSound("mob.bear.death");
+		BISONSAY = createSound("mob.bison.say");
+		BISONCRY = createSound("mob.bison.cry");
+		BISONHURT = createSound("mob.bison.hurt");
+		BISONDEATH = createSound("mob.bison.death");
 		PHAESANTSAY = createSound("mob.pheasant.say");
 		PHAESANTCHICKSAY = createSound("mob.pheasant.chick.say");
 		PHAESANTHURT = createSound("mob.pheasant.hurt");
@@ -78,7 +93,14 @@ public class TFC_Sounds
 		LIONHURT = createSound("mob.lion.hurt");
 		LIONDEATH = createSound("mob.lion.death");
 		KNAPPING = createSound("knapping");
-
+		ELKHORNS = createSound("mob.elk.horns.say");
+		ELKCRY = createSound("mob.elk.cry");
+		ELKHURT = createSound("mob.elk.hurt");
+		ELKDEATH = createSound("mob.elk.death");
+		ELKCUBCRY = createSound("mob.elk.cub.cry");
+		ELKCUBHURT = createSound("mob.elk.cub.hurt");
+		ELKCUBDEATH = createSound("mob.elk.cub.death");
+		
 		TFCMUSIC = createSound("music");
 	}
 

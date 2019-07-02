@@ -3,9 +3,14 @@ package com.bioxx.tfc2;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.List;
+
+import net.minecraft.item.Item;
+import net.minecraft.util.ResourceLocation;
 
 import net.minecraftforge.common.ForgeModContainer;
 import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.Mod.Instance;
@@ -13,11 +18,14 @@ import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.*;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import net.minecraftforge.fml.relauncher.Side;
 
 import com.bioxx.jmapgen.dungeon.DungeonSchemManager;
 import com.bioxx.jmapgen.dungeon.DungeonTheme.EntranceType;
+import com.bioxx.tfc2.api.FoodRegistry;
 import com.bioxx.tfc2.api.TFCOptions;
+import com.bioxx.tfc2.api.interfaces.IFood;
 import com.bioxx.tfc2.api.trees.TreeConfig;
 import com.bioxx.tfc2.api.trees.TreeRegistry;
 import com.bioxx.tfc2.api.trees.TreeSchematic;
@@ -26,7 +34,10 @@ import com.bioxx.tfc2.api.types.Moisture;
 import com.bioxx.tfc2.api.types.WoodType;
 import com.bioxx.tfc2.commands.*;
 import com.bioxx.tfc2.core.PortalSchematic;
+import com.bioxx.tfc2.core.util.FoodReader;
+import com.bioxx.tfc2.core.util.FoodReader.FoodJSON;
 import com.bioxx.tfc2.networking.client.CAnvilStrikePacket;
+import com.bioxx.tfc2.networking.client.CFoodPacket;
 import com.bioxx.tfc2.networking.client.CMapPacket;
 import com.bioxx.tfc2.networking.server.SAnvilCraftingPacket;
 import com.bioxx.tfc2.networking.server.SKnappingPacket;
@@ -65,6 +76,7 @@ public class TFC
 		network.registerMessage(SKnappingPacket.Handler.class, SKnappingPacket.class, 2, Side.SERVER);
 		network.registerMessage(CAnvilStrikePacket.Handler.class, CAnvilStrikePacket.class, 3, Side.CLIENT);
 		network.registerMessage(SAnvilCraftingPacket.Handler.class, SAnvilCraftingPacket.class, 4, Side.SERVER);
+		network.registerMessage(CFoodPacket.Handler.class, CFoodPacket.class, 5, Side.CLIENT);
 
 		//Register tree types and load tree schematics
 		loadTrees();
@@ -73,6 +85,47 @@ public class TFC
 
 		Core.PortalSchematic = new PortalSchematic("/assets/tfc2/schematics/portal.schematic", "portal");
 		Core.PortalSchematic.Load();
+
+		//Read our built in food values first
+		FoodReader foodReader;
+		try
+		{
+			//List<String> list = Helper.getResourceFiles("/assets/tfc2/food/");
+			//if(list.size() == 0)
+			//	TFC.log.info("Food -> No internal files found");
+			List<String> list = new ArrayList<String>();
+			list.add("harvestcraftfood.json");
+			list.add("tfc2food.json");
+
+			for(String f : list)
+			{
+				foodReader = new FoodReader("/assets/tfc2/food/"+f);
+				TFC.log.info("Food -> Reading " + foodReader.path);
+				if(foodReader.read())
+				{
+					applyFoodValues(foodReader);
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			TFC.log.error(e.getMessage());
+		}
+		//Now read from the user's mods folder
+		foodReader = new FoodReader("");
+		File folder = new File(TFC.proxy.getMinecraftDir(), "/mods/tfc2/food/");
+		if(folder != null && folder.listFiles() != null)
+		{
+			for (final File fileEntry : folder.listFiles()) 
+			{
+				if(foodReader.read(fileEntry))
+				{
+					applyFoodValues(foodReader);
+				}
+			}
+		}
+
+
 
 	}
 
@@ -92,6 +145,45 @@ public class TFC
 	public void modsLoaded(FMLPostInitializationEvent event)
 	{
 		ForgeModContainer.zombieBabyChance = 0;
+		if(Loader.isModLoaded("harvestcraft"))
+		{
+			try 
+			{
+				Class HCclass = Class.forName("com.pam.harvestcraft.HarvestCraft");
+				Object o = HCclass.getDeclaredField("instance").get(null);
+				Object configObj = HCclass.getDeclaredField("config").get(o);
+
+				Class configClass = Class.forName("com.pam.harvestcraft.config.ConfigHandler");
+
+				//Gardens
+				configClass.getDeclaredField("enablearidgardenGeneration").setBoolean(configObj, false);
+				configClass.getDeclaredField("enablefrostgardenGeneration").setBoolean(configObj, false);
+				configClass.getDeclaredField("enableshadedgardenGeneration").setBoolean(configObj, false);
+				configClass.getDeclaredField("enablesoggygardenGeneration").setBoolean(configObj, false);
+				configClass.getDeclaredField("enabletropicalgardenGeneration").setBoolean(configObj, false);
+				configClass.getDeclaredField("enablewindygardenGeneration").setBoolean(configObj, false);
+
+				//Fruit Trees
+				configClass.getDeclaredField("temperatefruittreeRarity").setInt(configObj, 0);
+				configClass.getDeclaredField("tropicalfruittreeRarity").setInt(configObj, 0);
+				configClass.getDeclaredField("coniferousfruittreeRarity").setInt(configObj, 0);
+
+			} catch (ClassNotFoundException e) 
+			{
+				log.warn("Unable to edit harvestcraft config class -> ClassNotFoundException");
+			} catch (NoSuchFieldException e) 
+			{
+				log.warn("Unable to edit harvestcraft config class -> NoSuchFieldException");
+			} catch (SecurityException e) 
+			{
+				log.warn("Unable to edit harvestcraft config class -> SecurityException");
+			} catch (IllegalArgumentException e) {
+				log.warn("Unable to edit harvestcraft config class -> IllegalArgumentException");
+			} catch (IllegalAccessException e) {
+				log.warn("Unable to edit harvestcraft config class -> IllegalAccessException");
+			}
+
+		}
 	}
 
 	@EventHandler
@@ -102,6 +194,7 @@ public class TFC
 		evt.registerServerCommand(new RemoveAreaCommand());
 		evt.registerServerCommand(new StripChunkCommand());
 		evt.registerServerCommand(new RegenChunkCommand());
+		evt.registerServerCommand(new DebugCommand());
 	}
 
 	@EventHandler
@@ -153,24 +246,24 @@ public class TFC
 		TreeRegistry tr = TreeRegistry.instance;
 		String treePath = "/assets/tfc2/schematics/trees/";
 		log.info("Loading Trees");
-		tr.addTreeType(new TreeConfig(WoodType.Ash.getName(), Core.getNaturalLog(WoodType.Ash), Core.getLeaves(WoodType.Ash), Moisture.LOW, Moisture.MAX, ClimateTemp.POLAR, ClimateTemp.TEMPERATE, false)); //Ash
-		tr.addTreeType(new TreeConfig(WoodType.Aspen.getName(), Core.getNaturalLog(WoodType.Aspen), Core.getLeaves(WoodType.Aspen), Moisture.MEDIUM, Moisture.HIGH, ClimateTemp.POLAR, ClimateTemp.TEMPERATE, false)); //Aspen
-		tr.addTreeType(new TreeConfig(WoodType.Birch.getName(), Core.getNaturalLog(WoodType.Birch), Core.getLeaves(WoodType.Birch), Moisture.LOW, Moisture.MEDIUM, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, false)); //Birch
-		tr.addTreeType(new TreeConfig(WoodType.Chestnut.getName(), Core.getNaturalLog(WoodType.Chestnut), Core.getLeaves(WoodType.Chestnut), Moisture.LOW, Moisture.HIGH, ClimateTemp.TEMPERATE, ClimateTemp.SUBTROPICAL, false)); //Chestnut
+		tr.addTreeType(new TreeConfig(WoodType.Ash.getName(), Core.getNaturalLog(WoodType.Ash), Core.getLeaves(WoodType.Ash), Moisture.LOW, Moisture.MAX, ClimateTemp.POLAR, ClimateTemp.TEMPERATE, false, true)); //Ash
+		tr.addTreeType(new TreeConfig(WoodType.Aspen.getName(), Core.getNaturalLog(WoodType.Aspen), Core.getLeaves(WoodType.Aspen), Moisture.MEDIUM, Moisture.HIGH, ClimateTemp.POLAR, ClimateTemp.TEMPERATE, false, true)); //Aspen
+		tr.addTreeType(new TreeConfig(WoodType.Birch.getName(), Core.getNaturalLog(WoodType.Birch), Core.getLeaves(WoodType.Birch), Moisture.LOW, Moisture.MEDIUM, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, false, true)); //Birch
+		tr.addTreeType(new TreeConfig(WoodType.Chestnut.getName(), Core.getNaturalLog(WoodType.Chestnut), Core.getLeaves(WoodType.Chestnut), Moisture.LOW, Moisture.HIGH, ClimateTemp.TEMPERATE, ClimateTemp.SUBTROPICAL, false, true)); //Chestnut
 
 		tr.addTreeType(new TreeConfig(WoodType.DouglasFir.getName(), Core.getNaturalLog(WoodType.DouglasFir), Core.getLeaves(WoodType.DouglasFir), Moisture.MEDIUM, Moisture.HIGH, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, true)); //Douglas Fir
 		tr.addTreeType(new TreeConfig(WoodType.Hickory.getName(), Core.getNaturalLog(WoodType.Hickory), Core.getLeaves(WoodType.Hickory), Moisture.LOW, Moisture.HIGH, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, false)); //Hickory
 		tr.addTreeType(new TreeConfig(WoodType.Maple.getName(), Core.getNaturalLog(WoodType.Maple), Core.getLeaves(WoodType.Maple), Moisture.LOW, Moisture.HIGH, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, false)); //Maple
-		tr.addTreeType(new TreeConfig(WoodType.Oak.getName(), Core.getNaturalLog(WoodType.Oak), Core.getLeaves(WoodType.Oak), Moisture.MEDIUM, Moisture.HIGH, ClimateTemp.SUBPOLAR, ClimateTemp.SUBTROPICAL, false)); //Oak
+		tr.addTreeType(new TreeConfig(WoodType.Oak.getName(), Core.getNaturalLog(WoodType.Oak), Core.getLeaves(WoodType.Oak), Moisture.MEDIUM, Moisture.HIGH, ClimateTemp.SUBPOLAR, ClimateTemp.SUBTROPICAL, false, true)); //Oak
 
 		tr.addTreeType(new TreeConfig(WoodType.Pine.getName(), Core.getNaturalLog(WoodType.Pine), Core.getLeaves(WoodType.Pine), Moisture.LOW, Moisture.VERYHIGH, ClimateTemp.POLAR, ClimateTemp.TEMPERATE, true)); //Pine
 		tr.addTreeType(new TreeConfig(WoodType.Sequoia.getName(), Core.getNaturalLog(WoodType.Sequoia), Core.getLeaves(WoodType.Sequoia), Moisture.HIGH, Moisture.MAX, ClimateTemp.SUBPOLAR, ClimateTemp.TEMPERATE, true)); //Sequoia
-		tr.addTreeType(new TreeConfig(WoodType.Spruce.getName(), Core.getNaturalLog(WoodType.Spruce), Core.getLeaves(WoodType.Spruce), Moisture.LOW, Moisture.MAX, ClimateTemp.POLAR, ClimateTemp.SUBTROPICAL, true)); //Spruce
+		tr.addTreeType(new TreeConfig(WoodType.Spruce.getName(), Core.getNaturalLog(WoodType.Spruce), Core.getLeaves(WoodType.Spruce), Moisture.LOW, Moisture.MAX, ClimateTemp.POLAR, ClimateTemp.SUBTROPICAL, true, true)); //Spruce
 		tr.addTreeType(new TreeConfig(WoodType.Sycamore.getName(), Core.getNaturalLog(WoodType.Sycamore), Core.getLeaves(WoodType.Sycamore), Moisture.MEDIUM, Moisture.MAX, ClimateTemp.TEMPERATE, ClimateTemp.SUBTROPICAL, false)); //Sycamore
 
 		tr.addTreeType(new TreeConfig(WoodType.WhiteCedar.getName(), Core.getNaturalLog(WoodType.WhiteCedar), Core.getLeaves(WoodType.WhiteCedar), Moisture.LOW, Moisture.MAX, ClimateTemp.POLAR, ClimateTemp.SUBTROPICAL, true)); //White Cedar
-		tr.addTreeType(new TreeConfig(WoodType.Willow.getName(), Core.getNaturalLog(WoodType.Willow), Core.getLeaves(WoodType.Willow), Moisture.HIGH, Moisture.MAX, ClimateTemp.TEMPERATE, ClimateTemp.SUBTROPICAL, false)); //Willow
-		tr.addTreeType(new TreeConfig(WoodType.Kapok.getName(), Core.getNaturalLog(WoodType.Kapok), Core.getLeaves(WoodType.Kapok), Moisture.HIGH, Moisture.MAX, ClimateTemp.SUBTROPICAL, ClimateTemp.TROPICAL, false)); //Kapok
+		tr.addTreeType(new TreeConfig(WoodType.Willow.getName(), Core.getNaturalLog(WoodType.Willow), Core.getLeaves(WoodType.Willow), Moisture.HIGH, Moisture.MAX, ClimateTemp.TEMPERATE, ClimateTemp.SUBTROPICAL, false, true)); //Willow
+		tr.addTreeType(new TreeConfig(WoodType.Kapok.getName(), Core.getNaturalLog(WoodType.Kapok), Core.getLeaves(WoodType.Kapok), Moisture.HIGH, Moisture.MAX, ClimateTemp.SUBTROPICAL, ClimateTemp.TROPICAL, false, true)); //Kapok
 		tr.addTreeType(new TreeConfig(WoodType.Acacia.getName(), Core.getNaturalLog(WoodType.Acacia), Core.getLeaves(WoodType.Acacia), Moisture.LOW, Moisture.LOW, ClimateTemp.SUBTROPICAL, ClimateTemp.TROPICAL, false)); //Acacia Umbrella
 
 		tr.addTreeType(new TreeConfig(WoodType.Rosewood.getName(), Core.getNaturalLog(WoodType.Rosewood), Core.getLeaves(WoodType.Rosewood), Moisture.MEDIUM, Moisture.MAX, ClimateTemp.SUBTROPICAL, ClimateTemp.TROPICAL, false)); //Rosewood
@@ -180,21 +273,26 @@ public class TFC
 		for (String s : tr.getTreeNames())
 		{
 			String tName = Core.textConvert(s);
+			TFC.log.info("Registering Tree -> "+s);
 			for(int i = 0; i < 3; i++)
 			{
-				String size = i == 0 ? "Small" : i == 1 ? "Normal" : "Large";
+				String size = i == 0 ? "small" : i == 1 ? "normal" : "large";
 				for(int j = 0; j < 99; j++)
 				{
 					String p = treePath + tName + "/"+size+"_"+String.format("%02d", j)+".schematic";
 
 					TreeSchematic schem = new TreeSchematic(p, size+"_"+String.format("%02d", j), WoodType.getTypeFromString(s));
+					//TFC.log.info(p + " | " + schem.getWoodType().getName());
 					if(schem.Load())
 					{
 						schem.PostProcess();
 						TreeRegistry.instance.RegisterSchematic(schem, s);
 					}
 					else
+					{
+						//TFC.log.info("Trouble loading "+p);
 						break;
+					}
 				}
 			}
 		}
@@ -269,4 +367,27 @@ public class TFC
 		log.info("Load Dungeon Schematics-Finish");
 	}
 
+	private void applyFoodValues(FoodReader reader)
+	{
+		for(FoodJSON f : reader.foodList)
+		{
+			ResourceLocation rl = new ResourceLocation(f.itemName);
+			Item i = ForgeRegistries.ITEMS.getValue(rl);
+			if(i == null)
+			{
+				log.warn("FoodRegistry -> Item not found when searching ItemRegistry for object ->" + f.itemName);
+				continue;
+			}
+			if(!(i instanceof IFood))
+			{
+				log.warn("Item ->" + f.itemName + " is not of type IFood");
+				continue;
+			}
+			//IFood food = (IFood)i;
+			//food.setExpirationTimer(f.decayTime);
+			//food.setFoodGroup(f.foodGroup);
+
+			FoodRegistry.getInstance().registerFood(f);
+		}
+	}
 }
